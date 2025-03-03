@@ -55,10 +55,10 @@ def load(con, records, target_table):
         CREATE TABLE IF NOT EXISTS {target_table} (
             symbol varchar NOT NULL,
             date timestamp_ntz NOT NULL,
-            open float,
-            high float,
-            low float,
-            close float,
+            open decimal(18,2),
+            high decimal(18,2),
+            low decimal(18,2),
+            close decimal(18,2),
             volume number,
             PRIMARY KEY (symbol, date)
         );""")
@@ -82,7 +82,7 @@ with DAG(
     start_date = datetime(2025,3,1),
     catchup=False,
     tags=['ETL'],
-    schedule = '20 4 * * *'
+    schedule = '0 5 * * *'
 ) as dag:
     target_table = "dev.raw.lab1_stock_price_table"
     cur = return_snowflake_conn()
