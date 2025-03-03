@@ -76,11 +76,11 @@ def load(con, records, target_table):
 
 
 with DAG(
-    dag_id = 'CountryCaptial',
+    dag_id = 'lab1_readStockInfo',
     start_date = datetime(2025,2,28),
     catchup=False,
     tags=['ETL'],
-    schedule = '30 8 * * *'
+    schedule = '0 3 * * *'
 ) as dag:
     target_table = "dev.raw.lab1_stock_price_table"
     cur = return_snowflake_conn()
