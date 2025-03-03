@@ -27,14 +27,14 @@ def train(cur, train_input_table, train_view, forecast_function_name):
     """
 
     create_view_sql = f"""CREATE OR REPLACE VIEW {train_view} AS SELECT
-        SYMBOL,DT, SCLOSE
+        symbol,date, close
         FROM {train_input_table};"""
 
     create_model_sql = f"""CREATE OR REPLACE SNOWFLAKE.ML.FORECAST {forecast_function_name} (
         INPUT_DATA => SYSTEM$REFERENCE('VIEW', '{train_view}'),
-        SERIES_COLNAME => 'SYMBOL',
-        TIMESTAMP_COLNAME => 'DT',
-        TARGET_COLNAME => 'SCLOSE',
+        SERIES_COLNAME => 'symbol',
+        TIMESTAMP_COLNAME => 'date',
+        TARGET_COLNAME => 'close',
         CONFIG_OBJECT => {{ 'ON_ERROR': 'SKIP' }}
     );"""
 
@@ -43,6 +43,7 @@ def train(cur, train_input_table, train_view, forecast_function_name):
         cur.execute(create_model_sql)
         # Inspect the accuracy metrics of your model. 
         cur.execute(f"CALL {forecast_function_name}!SHOW_EVALUATION_METRICS();")
+
     except Exception as e:
         print(e)
         raise
@@ -66,26 +67,28 @@ def predict(cur, forecast_function_name, train_input_table, forecast_table, fina
         CREATE OR REPLACE TABLE {forecast_table} AS SELECT * FROM TABLE(RESULT_SCAN(:x));
     END;"""
     create_final_table_sql = f"""CREATE OR REPLACE TABLE {final_table} AS
-        SELECT SYMBOL, DT, SCLOSE AS actual, NULL AS forecast, NULL AS lower_bound, NULL AS upper_bound
+        SELECT symbol, date, close AS actual, NULL AS forecast, NULL AS lower_bound, NULL AS upper_bound
         FROM {train_input_table}
         UNION ALL
-        SELECT SERIES as SYMBOL, ts as DT, NULL AS actual, forecast, lower_bound, upper_bound
+        SELECT SERIES as symbol, ts as date , NULL AS actual, forecast, lower_bound, upper_bound
         FROM {forecast_table};"""
 
     try:
         cur.execute(make_prediction_sql)
         cur.execute(create_final_table_sql)
+        cur.execute("COMMIT;")
     except Exception as e:
+        cur.execute("ROLLBACK;")
         print(e)
         raise
 
 
 with DAG(
-    dag_id = 'TrainPredict',
-    start_date = datetime(2025,2,28),
+    dag_id = 'lab1_TrainPredict',
+    start_date = datetime(2025,3,1),
     catchup=False,
     tags=['ML', 'ELT'],
-    schedule = '40 8 * * *'
+    schedule = '30 4 * * *'
 ) as dag:
 
     train_input_table = "dev.raw.lab1_stock_price_table"
