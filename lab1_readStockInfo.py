@@ -1,12 +1,13 @@
-# In Cloud Composer, add snowflake-connector-python to PYPI Packages
 from airflow import DAG
 from airflow.models import Variable
 from airflow.decorators import task
 
-from datetime import timedelta
-from datetime import datetime
+from datetime import datetime, timedelta
+import yfinance as yf
 import snowflake.connector
-import requests
+from snowflake.connector.pandas_tools import write_pandas
+import pandas as pd
+import os
 
 
 def return_snowflake_conn():
@@ -63,12 +64,13 @@ def load(con, records, target_table):
         );""")
         con.execute(f"DELETE FROM {target_table}")
 
-    for index, row in data.iterrows():
-        sql = f"INSERT INTO {staging_table} (symbol, date, open, high, low, close, volume) VALUES ('{row['Symbol']}', '{row['Date']}', '{row['Open']}', '{row['Close']}', '{row['High']}', '{row['Low']}', '{row['Volume']}')"
-        print(sql)
-        con.execute(sql)
+        for index, row in records.iterrows():
+            sql = f"INSERT INTO {target_table} (symbol, date, open, high, low, close, volume) VALUES ('{row['Symbol']}', '{row['Date']}', '{row['Open']}', '{row['Close']}', '{row['High']}', '{row['Low']}', '{row['Volume']}')"
+            print(sql)
+            con.execute(sql)
 
-        con.execute("COMMIT;")
+            con.execute("COMMIT;")
+
     except Exception as e:
         con.execute("ROLLBACK;")
         print(e)
@@ -77,14 +79,14 @@ def load(con, records, target_table):
 
 with DAG(
     dag_id = 'lab1_readStockInfo',
-    start_date = datetime(2025,2,28),
+    start_date = datetime(2025,3,1),
     catchup=False,
     tags=['ETL'],
-    schedule = '0 3 * * *'
+    schedule = '20 4 * * *'
 ) as dag:
     target_table = "dev.raw.lab1_stock_price_table"
     cur = return_snowflake_conn()
     symbols = ["FIVE", "AAPL"]
-    for symbol in symbols
+    for symbol in symbols:
         data = extract(symbol)
         load(cur, data, target_table)
