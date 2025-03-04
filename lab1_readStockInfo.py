@@ -69,7 +69,7 @@ def load(con, records, target_table):
             print(sql)
             con.execute(sql)
 
-            con.execute("COMMIT;")
+        con.execute("COMMIT;")
 
     except Exception as e:
         con.execute("ROLLBACK;")
@@ -87,6 +87,9 @@ with DAG(
     target_table = "dev.raw.lab1_stock_price_table"
     cur = return_snowflake_conn()
     symbols = ["FIVE", "AAPL"]
-    for symbol in symbols:
-        data = extract(symbol)
-        load(cur, data, target_table)
+    # Extract data and combine into a single DataFrame
+    extracted_data = [extract(symbol) for symbol in symbols]
+    combined_data = pd.concat(extracted_data, ignore_index=True)  # Merge DataFrames
+
+    # Load the combined data
+    load(cur, combined_data, target_table)
