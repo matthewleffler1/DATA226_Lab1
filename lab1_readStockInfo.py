@@ -29,48 +29,67 @@ def return_snowflake_conn():
 
 
 @task
-def extract(symbol):
-    df = yf.download(symbol, period='180d')
+def extract(symbols):
 
-    # Remove multi-index
-    df = df.droplevel(0, axis=1)
-    # Rename the columns
-    df.columns = ['Open', 'Close', 'High', 'Low', 'Volume']
-    
-    # Reset the index to make 'Date' a column
-    df = df.reset_index()
-    
-    # Select only the desired columns
-    df = df[['Date', 'Open', 'Close', 'High', 'Low', 'Volume']]
-    
-    df.insert(0, 'Symbol', symbol)
+    results = []  # List to store stock data
 
-    return df
+    for symbol in symbols:
+        df = yf.download(symbol, period='180d')
+
+        # Remove multi-index 
+        df = df.droplevel(0, axis=1)
+        # Rename the columns
+        df.columns = ['Open', 'Close', 'High', 'Low', 'Volume']
+        
+        # Reset the index to make 'Date' a column
+        df = df.reset_index()
+        
+        # Convert each row to a dictionary and add the symbol
+        for _, row in df.iterrows():
+            stock_data = {
+                "Symbol": symbol,
+                "Date": row['Date'].strftime('%Y-%m-%d'),  # Format date as string
+                "Open": row['Open'],
+                "Close": row['Close'],
+                "High": row['High'],
+                "Low": row['Low'],
+                "Volume": row['Volume']
+            }
+            results.append(stock_data)
+    
+    return results
 
 @task
 def load(con, records, target_table):
     try:
         con.execute("BEGIN;")
-        con.execute(f"""
-        CREATE TABLE IF NOT EXISTS {target_table} (
-            symbol varchar NOT NULL,
-            date timestamp_ntz NOT NULL,
-            open decimal(18,2),
-            high decimal(18,2),
-            low decimal(18,2),
-            close decimal(18,2),
-            volume number,
-            PRIMARY KEY (symbol, date)
+        con.execute(f"""CREATE TABLE IF NOT EXISTS {target_table} (
+          SYMBOL VARCHAR NOT NULL,
+          DT DATE NOT NULL,
+          OPEN NUMBER(38,0),
+          CLOSE NUMBER(38,0),
+          HIGH NUMBER(38,0),
+          LOW NUMBER(38,0),
+          VOLUME NUMBER(38,0),
+          PRIMARY KEY (SYMBOL, DT)
         );""")
         con.execute(f"DELETE FROM {target_table}")
 
-        for index, row in records.iterrows():
-            sql = f"INSERT INTO {target_table} (symbol, date, open, high, low, close, volume) VALUES ('{row['Symbol']}', '{row['Date']}', '{row['Open']}', '{row['Close']}', '{row['High']}', '{row['Low']}', '{row['Volume']}')"
-            print(sql)
+        for i in records:
+            sql = f"""
+            INSERT INTO {target_table} (SYMBOL, DT, OPEN, CLOSE, HIGH, LOW, VOLUME)
+            VALUES (
+                '{i["Symbol"]}',
+                '{i["Date"]}',
+                {i["Open"]},
+                {i["Close"]},
+                {i["High"]},
+                {i["Low"]},
+                {i["Volume"]}
+            )"""
             con.execute(sql)
 
         con.execute("COMMIT;")
-
     except Exception as e:
         con.execute("ROLLBACK;")
         print(e)
@@ -88,8 +107,6 @@ with DAG(
     cur = return_snowflake_conn()
     symbols = ["FIVE", "AAPL"]
     # Extract data and combine into a single DataFrame
-    extracted_data = [extract(symbol) for symbol in symbols]
-    combined_data = pd.concat(extracted_data, ignore_index=True)  # Merge DataFrames
-
+    extracted_data = extract(symbols)
     # Load the combined data
-    load(cur, combined_data, target_table)
+    load(cur, extracted_data, target_table)
